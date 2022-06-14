@@ -22,14 +22,5 @@ class TrainerCallbackInterface(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def num_classes(self) -> int:
-        """The number of classes in the training dataset.
-
-        If the task doesn't have classes, returns zero.
-        """
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
     def device(self) -> torch.device:
         raise NotImplementedError

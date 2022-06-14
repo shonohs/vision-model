@@ -8,7 +8,7 @@ if typing.TYPE_CHECKING:
 
 
 class PluginBase:
-    """Callbacks to modify the training behavior."""
+    """Base class for plugins to modify Trainer behavior."""
 
     def on_train_start(self, trainer: TrainerCallbackInterface, model: 'ModelBase') -> None:
         """Called when the training begins.
