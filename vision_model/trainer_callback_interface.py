@@ -8,44 +8,19 @@ class TrainerCallbackInterface(abc.ABC):
     @property
     @abc.abstractmethod
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        """Get a training dataloader."""
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def val_dataloader(self) -> typing.Optional[torch.utils.data.DataLoader]:
-        raise NotImplementedError
+        """Get a validation dataloader.
 
-    @property
-    @abc.abstractmethod
-    def num_epochs(self) -> int:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def num_classes(self) -> int:
+        Returns None if a validation set is not available.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def device(self) -> torch.device:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def criterion(self) -> torch.nn.Module:
-        raise NotImplementedError
-
-    @criterion.setter
-    @abc.abstractmethod
-    def criterion(self, value):
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def predictor(self) -> torch.nn.Module:
-        raise NotImplementedError
-
-    @predictor.setter
-    @abc.abstractmethod
-    def predictor(self, value):
         raise NotImplementedError
