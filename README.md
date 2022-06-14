@@ -8,11 +8,12 @@ When a model requires advanced changes to training behavior, it can implement a 
 
 ## Install
 ```
-pip install vision-model
+pip install vision_model
 ```
 
 ## Examples
 
+### Image Classification model example
 Here is an example to define a simple multiclass classification model.
 ```python
 from vision_model import ModelBase, PluginBase
@@ -49,111 +50,69 @@ class MyPlugin(PluginBase):
         return
 ```
 
-Pleasee see examples/ directory for more practical examples.
+Pleasee see [examples/ directory](./examples) for more practical examples.
 
+### Trainer implementation example
+```python
+class ImageClassificationTrainer(TrainerCallbackInterface):
+    # TrainerCallbackInterface implementations are omitted here.
 
-## Interfaces
+    def train(model: ModelBase, dataloader, additional_plugins):
+        plugins = PluginList(model.plugins + additional_plugins)  # PluginList has PluginBase interfaces.
 
-```
-class ModelBase(torch.nn.modules.module.Module)
- |  Base class for vision-related models.
- |
- |  Attributes:
- |      HYPERPARAMETERS (Dict): Model specific hyper parameters.
- |          A model can provide names of model-specific hyperparameters and their candidates.
- |          If provided, trainer may run multiple trainings searching for the best hyperparameters.
- |
- |          Example:
- |          HYPERPARAMETERS = {'dropout_rate': [0.1, 0.5, 0.9]}
- |
- |  Method resolution order:
- |      ModelBase
- |      torch.nn.modules.module.Module
- |      builtins.object
- |
- |  Readonly properties defined here:
- |
- |  criterion
- |      Get a criterion module for the model. Input/Output formats are defined for each task.
- |
- |  plugins
- |      List of plugins that are required for the model
- |
- |  predictor
- |      Get a predictor module for the model. Input/Output formats are defined for each task.
-```
+        plugins.on_train_start(self, model)
+        for epoch in range(self.num_epochs):
+            plugins.on_train_epoch_start(self, model)
+            for batch_index, batch in enumerate(dataloader):
+                batch = plugins.on_train_batch_start(self, model, batch, batch_index)
+                features = model(batch)
+                loss = model.criterion(features)
+                loss.backward()
 
-```
-class PluginBase(builtins.object)
- |  Callbacks to modify the training behavior.
- |
- |  Methods defined here:
- |
- |  on_prediction_end(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the prediction ends.
- |
- |  on_prediction_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the prediction begins.
- |
- |  on_save_model(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]
- |      Called when the trainer saves a pytorch model state.
- |
- |  on_save_onnx_end(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', onnx_model: bytes) -> bytes
- |      Called when the model is saved as onnx. Returns an updated onnx model binary.
- |
- |  on_save_onnx_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', nn_model: torch.nn.modules.module.Module) -> torch.nn.modules.module.Module
- |      Called before ONNX tracing is performed. The returned nn_model will be used for tracing.
- |
- |  on_train_backward_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', loss: torch.Tensor) -> torch.Tensor
- |      Called when the train backward step begins. Returns a modified loss.
- |
- |  on_train_batch_end(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', batch: Tuple, batch_index: int) -> None
- |      Called when the train batch ends.
- |
- |  on_train_batch_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase', batch: Tuple, batch_index: int) -> Any
- |      Called when the train batch begins. Returns a modified batch.
- |
- |  on_train_end(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the training ends.
- |
- |  on_train_epoch_end(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the train epoch ends.
- |
- |  on_train_epoch_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the train epoch begins.
- |
- |  on_train_start(self, trainer: vision_model.trainer_callback_interface.TrainerCallbackInterface, model: 'ModelBase') -> None
- |      Called when the training begins.
- |      Notes:
- |          - Optimizers are configured after this callback is called.
+                # Omitted: optimizer.step(), lr_scheduler.update() here
+
+                plugins.on_train_batch_end(self, model, batch, batch_index)
+            plugins.on_train_epoch_end(self, model)
+
+        plugins.on_train_end(self, model)
+
+    def validate(model: ModelBase, dataloader):
+        results = []
+        for batch_index, batch in enumerate(dataloader):
+            features = model(batch)
+            outputs = model.predictor(features)
+            results.append(outputs)
+
+        return torch.cat(results)
 ```
 
-## IO for Model, Criterion, and Predictor
+## Input/Output for Model, Criterion, and Predictor
 
 Here is our current recommended input/output format for model, criterion and predictor.
 
 Notations
 ```
 ImageTensor: FP32 Tensor with shape (N, 3, H, W). The image format is RGB and the value range is [0-1].
-BoxTensor: FP32 Tensor with shape [num_boxes, 4] that represents bounding boxes on an image. [x1, y1, x2, y2]. 0<=x1<=x2=1, and 0<=y1<=y2<=1.
+BoxTensor: FP32 Tensor with shape [num_boxes, 4] that represents bounding boxes on an image. Each box is in relative coordinates [x1, y1, x2, y2]. 0<=x1<x2<=1 and 0<=y1<y2<=1.
 LossTensor: FP32 Tensor with shape (1,)
 ImageFeature: FP32 Tensor with shape (N, **).
 TextFeature: FP32 Tensor with shape (N, **).
 num_boxes: the number of boxes in an image.
 num_classes: the number of classes in a dataset.
+TextTokens: A list of tokenized texts.
 ```
 
 ### Image Classification
 ```
 Model(ImageTensor) -> ImageFeature
-Criterion(ImageFeature, Targets) -> LossTensor
+Criterion(ImageFeature, Targets) -> LossTensor  # Targets is Tensor[N, num_classes] and should be numbers between 0 and 1
 Predictor(ImageFeature) -> Tensor[N, num_classes]
 ```
 
 ### Object Detection
 ```
 Model(ImageTensor) -> ImageFeature
-Criterion(ImageFeature, Targets) -> LossTensor
+Criterion(ImageFeature, Targets) -> LossTensor  # Targets is List[Tensor[N, 5]]. A box is represented as [class_id (int), x1, y1, x2, y2].
 Predictor(ImageFeature) -> (List[BoxTensor], List[Torch[num_boxes, num_classes]])  # Box and probabilities
 ```
 
@@ -169,4 +128,11 @@ Predictor(ImageFeature) -> Tensor[N, num_classes]
 Model(ImageTensor, TextTokens) -> (ImageFeature, TextFeature)
 Criterion((ImageFeature, TextFeature), Targets) -> LossTensor
 Predictor(ImageFeature) -> (List[BoxTensor], List[Torch[num_boxes, num_classes]])
+```
+
+### Image Captioning
+```
+Model(ImageTensor, TextTokens) -> (ImageFeature, TextFeature)
+Criterion((ImageFeature, TextFeature), Targets) -> LossTensor  # Targets has same format with TextTokens.
+Predictor(ImageFeature) -> TextTokens
 ```
